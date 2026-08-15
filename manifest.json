@@ -1,0 +1,8 @@
+{
+  "name": "HURE HBMS POS",
+  "short_name": "HURE POS",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#17212b",
+  "background_color": "#f4f6f8"
+}
