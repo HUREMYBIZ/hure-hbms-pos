@@ -20,7 +20,7 @@ h2{margin:4px 0 13px}h3{margin:3px 0 11px}table{width:100%;border-collapse:colla
 <body>
 <header><div class="brand">HURE <span>HBMS POS</span> — Hardware Business Management System</div><div id="clock"></div></header>
 <nav id="nav">
-<button class="active" data-p="dashboard">Dashboard</button><button data-p="pos">POS</button><button data-p="inventory">Inventory</button><button data-p="purchases">Purchases</button><button data-p="customers">Customers / A-R</button><button data-p="suppliers">Suppliers</button><button data-p="expenses">Expenses</button><button data-p="sales">Sales</button><button data-p="reports">Reports</button><button data-p="settings">Settings</button>
+<button class="active" data-p="dashboard">Dashboard</button><button data-p="pos">POS</button><button data-p="inventory">Inventory</button><button data-p="purchases">Purchases</button><button data-p="customers">Customers / A-R</button><button data-p="suppliers">Suppliers</button><button data-p="expenses">Expenses</button><button data-p="sales">Sales</button><button data-p="reports">Reports</button><button data-p="tractor">Tractor Services</button><button data-p="settings">Settings</button>
 </nav>
 <main>
 <section id="dashboard" class="page active"><h2>Business Dashboard</h2>
@@ -44,6 +44,26 @@ h2{margin:4px 0 13px}h3{margin:3px 0 11px}table{width:100%;border-collapse:colla
 
 <section id="reports" class="page"><h2>Reports</h2><div class="panel"><div class="toolbar"><input id="rfrom" type="date"><input id="rto" type="date"><button class="blue" onclick="runReport()">Generate</button><button class="secondary" onclick="window.print()">Print</button></div><div id="reportOut"><div class="status">Choose a date range and generate a report.</div></div></div></section>
 
+<section id="tractor" class="page"><h2>Tractor Services / Income</h2>
+<div class="panel">
+<div class="toolbar">
+<input id="tractorSearch" placeholder="Search date / equipment / operator / client / location" style="flex:1">
+<button class="blue" onclick="document.getElementById('tractorImport').click()">Import Tractor Excel</button>
+<input id="tractorImport" type="file" accept=".xlsx,.xls,.csv" hidden onchange="importTractorExcel(this.files[0])">
+<button class="secondary" onclick="exportTractor()">Export CSV</button>
+</div>
+<div class="cards">
+<div class="card"><small>Total Service Bill</small><strong id="tRevenue">₱0.00</strong></div>
+<div class="card"><small>Initial Payments</small><strong id="tPaid">₱0.00</strong></div>
+<div class="card"><small>Outstanding Balance</small><strong id="tBalance">₱0.00</strong></div>
+<div class="card"><small>Driver Payout</small><strong id="tDriver">₱0.00</strong></div>
+<div class="card"><small>Fuel Cost</small><strong id="tFuel">₱0.00</strong></div>
+</div>
+<div class="tablewrap"><table><thead><tr>
+<th>Date</th><th>Equipment</th><th>Operator</th><th>Location</th><th>Client</th><th>Hours</th><th>Rate</th><th>Service Bill</th><th>Payment</th><th>Balance</th><th>Driver Payout</th><th>Fuel L</th><th>Fuel ₱/L</th>
+</tr></thead><tbody id="tractorBody"></tbody></table></div>
+</div></section>
+
 <section id="settings" class="page"><h2>System Settings & Backup</h2><div class="grid"><div class="panel"><h3>Business Information</h3><div class="status">These details appear on printed receipts.</div><input id="biz" placeholder="Business name" style="width:100%;margin-bottom:7px"><input id="addr" placeholder="Address / contact" style="width:100%;margin-bottom:7px"><button class="success" onclick="saveSettings()">Save Business Info</button></div><div class="panel"><h3>Database Backup</h3><p class="muted">Your records are stored locally in this browser on this Mac.</p><button class="primary" onclick="backup()">Backup Database</button> <button class="secondary" onclick="document.getElementById('restore').click()">Restore Backup</button><input id="restore" type="file" accept=".json" hidden onchange="restore(this.files[0])"><hr><button class="danger" onclick="resetDB()">Reset Database</button></div></div></section>
 </main>
 
@@ -56,7 +76,8 @@ let db=JSON.parse(localStorage.getItem(K)||'null')||{settings:{biz:'HURE Hardwar
 {code:'CEM001',name:'Portland Cement',cat:'Construction',unit:'bag',cost:250,price:285,stock:100,reorder:20,supplier:''},
 {code:'HCB001',name:'4" Hollow Block',cat:'Masonry',unit:'pc',cost:12,price:16,stock:1000,reorder:200,supplier:''},
 {code:'SND001',name:'Washed Sand',cat:'Aggregates',unit:'load',cost:1000,price:1200,stock:20,reorder:5,supplier:''},
-{code:'GRV001',name:'Gravel',cat:'Aggregates',unit:'load',cost:1000,price:1200,stock:20,reorder:5,supplier:''}],customers:[],suppliers:[],purchases:[],expenses:[],sales:[]};
+{code:'GRV001',name:'Gravel',cat:'Aggregates',unit:'load',cost:1000,price:1200,stock:20,reorder:5,supplier:''}],customers:[],suppliers:[],purchases:[],expenses:[],sales:[],tractorRecords:[]};
+db.tractorRecords=db.tractorRecords||[];
 let cart=[];
 const peso=n=>new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP'}).format(+n||0);
 const save=()=>{localStorage.setItem(K,JSON.stringify(db));renderAll()};
@@ -69,7 +90,7 @@ function today(){return new Date().toISOString().slice(0,10)}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(b.dataset.p).classList.add('active');renderAll()});
 setInterval(()=>clock.textContent=new Date().toLocaleString('en-PH'),1000);
 
-ps.oninput=renderPOS;is.oninput=renderInv;cs.oninput=renderCustomers;ss.oninput=renderSuppliers;es.oninput=renderExpenses;saleSearch.oninput=renderSales;purSearch.oninput=renderPurchases;
+ps.oninput=renderPOS;is.oninput=renderInv;cs.oninput=renderCustomers;ss.oninput=renderSuppliers;es.oninput=renderExpenses;saleSearch.oninput=renderSales;purSearch.oninput=renderPurchases;tractorSearch.oninput=renderTractor;
 pay.onchange=()=>{received.value='';change.value='';};received.oninput=calcChange;
 function calcChange(){let t=cartTotal(),r=+received.value||0;change.value=pay.value==='Cash'?peso(Math.max(0,r-t)):pay.value==='Partial'?peso(Math.max(0,t-r)):peso(t)}
 function cartTotal(){return cart.reduce((a,x)=>a+x.qty*x.price,0)}
@@ -102,6 +123,94 @@ function saveExpense(){let a=+ea.value||0;if(a<=0)return alert('Enter amount.');
 function renderExpenses(){let q=(es.value||'').toLowerCase();eb.innerHTML=db.expenses.slice().reverse().filter(x=>(x.cat+x.desc+x.paidby).toLowerCase().includes(q)).map(x=>`<tr><td>${x.date}</td><td>${esc(x.cat)}</td><td>${esc(x.desc)}</td><td>${peso(x.amount)}</td><td>${esc(x.paidby)}</td></tr>`).join('')}
 
 function renderSales(){let q=(saleSearch.value||'').toLowerCase();sb.innerHTML=db.sales.slice().reverse().filter(x=>(x.invoice+x.item+x.customer+x.code).toLowerCase().includes(q)).map(x=>`<tr><td>${new Date(x.date).toLocaleString('en-PH')}</td><td>${x.invoice}</td><td>${esc(x.item)}</td><td>${x.qty}</td><td>${peso(x.amount)}</td><td>${x.payment}</td><td>${esc(x.customer||'Walk-in')}</td><td>${peso(x.profit)}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">No sales.</td></tr>'}
+function tractorNum(v){const x=String(v??'').replace(/,/g,'').replace(/₱/g,'').trim();return x===''?0:Number(x)||0}
+function tractorDate(v){
+  if(v instanceof Date&&!isNaN(v)) return v.toISOString().slice(0,10);
+  const s=String(v??'').trim();
+  if(!s)return '';
+  const d=new Date(s);
+  return isNaN(d)?s:d.toISOString().slice(0,10);
+}
+function tractorTime(v){
+  if(v instanceof Date&&!isNaN(v)) return v.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+  if(typeof v==='number') return String(Math.round(v*24*60)).padStart(4,'0');
+  return String(v??'').trim();
+}
+async function importTractorExcel(file){
+  if(!file)return;
+  try{
+    const isCsv=/\\.csv$/i.test(file.name);
+    let rows=[];
+    if(isCsv) rows=parseCSVText(await file.text());
+    else {
+      if(typeof XLSX==='undefined')throw new Error('Excel reader is not loaded.');
+      const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});
+      const sheetName=wb.SheetNames.find(s=>normHeader(s)==='hureibms')||wb.SheetNames[0];
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
+    }
+    if(rows.length<2)throw new Error('No tractor records found.');
+    const headers=rows[0].map(x=>String(x??'').trim());
+    const col=(...names)=>{const wanted=names.map(normHeader);return headers.findIndex(h=>wanted.includes(normHeader(h)))};
+    const ix={
+      date:col('Date'),equipment:col('Equipment'),operator:col('Operator'),location:col('Location'),
+      client:col('Client'),time:col('Time'),hours:col('Hours'),rate:col('Rate'),
+      bill:col('Service Bill'),initial:col('Initial Payment'),balance:col('Balance'),
+      payment:col('Payment','Client Pament Status','Client Payment Status'),
+      driverRate:col('Driver Rate'),driverPayout:col('Driver Payout','Driver PayOut'),
+      driverStatus:col('Driver PayOut Status','Driver Payout Status'),
+      fuel:col('FUEL Comsumption','FUEL Consumption','Fuel Consumption'),
+      fuelPrice:col('Fuel Price/Liter','Fuel Price / Liter')
+    };
+    if(ix.date<0||ix.equipment<0||ix.client<0)throw new Error('Required columns Date, Equipment and Client were not found.');
+    const records=[];
+    for(let n=1;n<rows.length;n++){
+      const row=rows[n];
+      if(row.every(v=>String(v??'').trim()===''))continue;
+      records.push({
+        id:'TR-'+Date.now()+'-'+n,
+        date:tractorDate(row[ix.date]),
+        equipment:String(row[ix.equipment]??'').trim(),
+        operator:String(row[ix.operator]??'').trim(),
+        location:String(row[ix.location]??'').trim(),
+        client:String(row[ix.client]??'').trim(),
+        time:tractorTime(ix.time>=0?row[ix.time]:''),
+        hours:tractorNum(ix.hours>=0?row[ix.hours]:0),
+        rate:tractorNum(ix.rate>=0?row[ix.rate]:0),
+        bill:tractorNum(ix.bill>=0?row[ix.bill]:0),
+        initial:tractorNum(ix.initial>=0?row[ix.initial]:0),
+        balance:tractorNum(ix.balance>=0?row[ix.balance]:0),
+        payment:String(ix.payment>=0?row[ix.payment]??'':'').trim(),
+        driverRate:tractorNum(ix.driverRate>=0?row[ix.driverRate]:0),
+        driverPayout:tractorNum(ix.driverPayout>=0?row[ix.driverPayout]:0),
+        driverStatus:String(ix.driverStatus>=0?row[ix.driverStatus]??'':'').trim(),
+        fuel:tractorNum(ix.fuel>=0?row[ix.fuel]:0),
+        fuelPrice:tractorNum(ix.fuelPrice>=0?row[ix.fuelPrice]:0)
+      });
+    }
+    if(!records.length)throw new Error('No usable tractor records found.');
+    const replace=confirm('Import '+records.length+' tractor records from '+file.name+'?\\n\\nOK = replace the existing imported tractor history.\\nCancel = keep the current records.');
+    if(!replace)return;
+    db.tractorRecords=records;
+    save();
+    alert('Tractor history imported successfully: '+records.length+' records.');
+    document.getElementById('tractorImport').value='';
+  }catch(e){alert('Tractor import failed:\\n\\n'+(e.message||e));document.getElementById('tractorImport').value='';}
+}
+function normHeader(s){return String(s??'').toLowerCase().replace(/[^a-z0-9]/g,'')}
+function renderTractor(){
+  const q=(tractorSearch.value||'').toLowerCase();
+  const rows=db.tractorRecords.filter(x=>(x.date+x.equipment+x.operator+x.location+x.client+x.payment).toLowerCase().includes(q));
+  const revenue=rows.reduce((a,x)=>a+x.bill,0),paid=rows.reduce((a,x)=>a+x.initial,0),bal=rows.reduce((a,x)=>a+x.balance,0),driver=rows.reduce((a,x)=>a+x.driverPayout,0),fuel=rows.reduce((a,x)=>a+x.fuel*x.fuelPrice,0);
+  tRevenue.textContent=peso(revenue);tPaid.textContent=peso(paid);tBalance.textContent=peso(bal);tDriver.textContent=peso(driver);tFuel.textContent=peso(fuel);
+  tractorBody.innerHTML=rows.slice().reverse().map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.equipment)}</td><td>${esc(x.operator)}</td><td>${esc(x.location)}</td><td>${esc(x.client)}</td><td>${x.hours}</td><td>${peso(x.rate)}</td><td>${peso(x.bill)}</td><td>${esc(x.payment)}</td><td>${peso(x.balance)}</td><td>${peso(x.driverPayout)}</td><td>${x.fuel}</td><td>${peso(x.fuelPrice)}</td></tr>`).join('')||'<tr><td colspan="13" class="empty">No tractor records.</td></tr>';
+}
+function exportTractor(){
+  download('HURE_Tractor_Services.csv',csv([
+    ['Date','Equipment','Operator','Location','Client','Time','Hours','Rate','Service Bill','Initial Payment','Balance','Payment Status','Driver Rate','Driver Payout','Driver Payout Status','Fuel Consumption','Fuel Price/Liter'],
+    ...db.tractorRecords.map(x=>[x.date,x.equipment,x.operator,x.location,x.client,x.time,x.hours,x.rate,x.bill,x.initial,x.balance,x.payment,x.driverRate,x.driverPayout,x.driverStatus,x.fuel,x.fuelPrice])
+  ]),'text/csv');
+}
+
 function renderDashboard(){let d=today(),s=db.sales.filter(x=>x.date.slice(0,10)===d),sales=s.reduce((a,x)=>a+x.amount,0),cash=s.filter(x=>x.payment==='Cash').reduce((a,x)=>a+x.amount,0),cr=s.filter(x=>x.payment!=='Cash').reduce((a,x)=>a+x.amount,0),pr=s.reduce((a,x)=>a+x.profit,0),sv=db.inventory.reduce((a,x)=>a+x.cost*x.stock,0);dsales.textContent=peso(sales);dcash.textContent=peso(cash);dcredit.textContent=peso(cr);dprofit.textContent=peso(pr);dstock.textContent=peso(sv);low.innerHTML=db.inventory.filter(i=>i.stock<=i.reorder).map(i=>`<div class="status"><b>${esc(i.name)}</b> — <span class="low">${i.stock} ${esc(i.unit)}</span></div>`).join('')||'<div class="empty">No low stock.</div>';latest.innerHTML=db.sales.slice(-7).reverse().map(x=>`<div class="status">${x.invoice} · ${esc(x.item)} · ${peso(x.amount)}</div>`).join('')||'<div class="empty">No transactions.</div>'}
 
 function runReport(){let f=rfrom.value,t=rto.value||f;if(!f)return alert('Select a start date.');let ss=db.sales.filter(x=>x.date.slice(0,10)>=f&&x.date.slice(0,10)<=t),ex=db.expenses.filter(x=>x.date>=f&&x.date<=t),sales=ss.reduce((a,x)=>a+x.amount,0),profit=ss.reduce((a,x)=>a+x.profit,0),expenses=ex.reduce((a,x)=>a+x.amount,0),cash=ss.filter(x=>x.payment==='Cash').reduce((a,x)=>a+x.amount,0),credit=ss.filter(x=>x.payment!=='Cash').reduce((a,x)=>a+x.amount,0);reportOut.innerHTML=`<h3>HURE HBMS Report</h3><p>${f} to ${t}</p><div class="cards"><div class="card"><small>Sales</small><strong>${peso(sales)}</strong></div><div class="card"><small>Cash</small><strong>${peso(cash)}</strong></div><div class="card"><small>Credit/Partial</small><strong>${peso(credit)}</strong></div><div class="card"><small>Gross Profit</small><strong>${peso(profit)}</strong></div><div class="card"><small>Expenses</small><strong>${peso(expenses)}</strong></div></div><h3>Net After Recorded Expenses: ${peso(profit-expenses)}</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Invoice</th><th>Item</th><th>Amount</th><th>Profit</th></tr></thead><tbody>${ss.map(x=>`<tr><td>${x.date.slice(0,10)}</td><td>${x.invoice}</td><td>${esc(x.item)}</td><td>${peso(x.amount)}</td><td>${peso(x.profit)}</td></tr>`).join('')}</tbody></table></div>`}
@@ -193,6 +302,6 @@ function parseCSVText(textData){
 function exportInventory(){download('HURE_Inventory.csv',csv([['Code','Item','Category','Unit','Cost','Price','Stock','Reorder','Supplier'],...db.inventory.map(x=>[x.code,x.name,x.cat,x.unit,x.cost,x.price,x.stock,x.reorder,x.supplier])]),'text/csv')}
 function exportSales(){download('HURE_Sales.csv',csv([['Date','Invoice','Code','Item','Qty','Price','Amount','Payment','Customer','Cost','Profit'],...db.sales.map(x=>[x.date,x.invoice,x.code,x.item,x.qty,x.price,x.amount,x.payment,x.customer,x.cost,x.profit])]),'text/csv')}
 function renderSettings(){biz.value=db.settings.biz||'';addr.value=db.settings.addr||''}
-function renderAll(){renderDashboard();renderPOS();renderInv();renderPurchases();renderCustomers();renderSuppliers();renderExpenses();renderSales();renderSettings()}
+function renderAll(){renderDashboard();renderPOS();renderInv();renderPurchases();renderCustomers();renderSuppliers();renderExpenses();renderSales();renderTractor();renderSettings()}
 renderAll();
 </script></body></html>
