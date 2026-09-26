@@ -15,6 +15,7 @@ h2{margin:4px 0 13px}h3{margin:3px 0 11px}table{width:100%;border-collapse:colla
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:30;align-items:center;justify-content:center}.modal.show{display:flex}.modalbox{width:min(650px,94vw);max-height:90vh;overflow:auto;background:#fff;border-radius:11px;padding:18px}.receipt{font-family:monospace;max-width:380px;margin:auto}.receipt h3{text-align:center;margin:3px}.r{display:flex;justify-content:space-between}.receipt hr{border:0;border-top:1px dashed #333}
 @media(max-width:1000px){.cards{grid-template-columns:repeat(2,1fr)}.grid,.posgrid{grid-template-columns:1fr}.items{grid-template-columns:repeat(2,1fr)}}@media print{body>*{display:none!important}.modal.show{display:block!important;position:static;background:white}.modalbox{width:100%;box-shadow:none}.noprint{display:none!important}}
 </style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <header><div class="brand">HURE <span>HBMS POS</span> — Hardware Business Management System</div><div id="clock"></div></header>
@@ -29,7 +30,7 @@ h2{margin:4px 0 13px}h3{margin:3px 0 11px}table{width:100%;border-collapse:colla
 <section id="pos" class="page"><h2>Point of Sale</h2><div class="posgrid"><div class="panel"><div class="toolbar"><input id="ps" placeholder="Search item / code / category" style="flex:1"><button class="secondary" onclick="clearCart()">Clear</button></div><div id="items" class="items"></div></div>
 <div class="panel"><h3>Current Order</h3><div id="cart" class="cart"></div><div id="ptotal" class="total">₱0.00</div><div class="two"><select id="pay"><option>Cash</option><option>Credit</option><option>Partial</option></select><input id="cust" placeholder="Customer (required for credit)"></div><div class="two" style="margin-top:7px"><input id="received" type="number" step=".01" placeholder="Amount received"><input id="change" readonly placeholder="Change / balance"></div><button class="success" style="width:100%;margin-top:8px;font-size:16px" onclick="checkout()">COMPLETE SALE</button></div></div></section>
 
-<section id="inventory" class="page"><h2>Inventory</h2><div class="panel"><div class="toolbar"><input id="is" placeholder="Search inventory" style="flex:1"><button class="primary" onclick="itemForm()">+ New Item</button><button class="secondary" onclick="exportInventory()">Export CSV</button></div><div class="tablewrap"><table><thead><tr><th>Code</th><th>Item</th><th>Category</th><th>Unit</th><th>Cost</th><th>Price</th><th>Stock</th><th>Reorder</th><th>Supplier</th><th></th></tr></thead><tbody id="ib"></tbody></table></div></div></section>
+<section id="inventory" class="page"><h2>Inventory</h2><div class="panel"><div class="toolbar"><input id="is" placeholder="Search inventory" style="flex:1"><button class="primary" onclick="itemForm()">+ New Item</button><button class="blue" onclick="document.getElementById('excelImport').click()">Import Excel</button><input id="excelImport" type="file" accept=".xlsx,.xls,.csv" hidden onchange="importInventoryExcel(this.files[0])"><button class="secondary" onclick="exportInventory()">Export CSV</button></div><div class="tablewrap"><table><thead><tr><th>Code</th><th>Item</th><th>Category</th><th>Unit</th><th>Cost</th><th>Price</th><th>Stock</th><th>Reorder</th><th>Supplier</th><th></th></tr></thead><tbody id="ib"></tbody></table></div></div></section>
 
 <section id="purchases" class="page"><h2>Purchases / Stock Receiving</h2><div class="panel"><div class="toolbar"><button class="primary" onclick="purchaseForm()">+ Receive Stock</button><input id="purSearch" placeholder="Search purchase" style="flex:1"></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Ref</th><th>Supplier</th><th>Item</th><th>Qty</th><th>Cost</th><th>Total</th></tr></thead><tbody id="pub"></tbody></table></div></div></section>
 
@@ -108,6 +109,87 @@ function backup(){download('HURE_HBMS_Backup_'+today()+'.json',JSON.stringify(db
 function restore(file){if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.inventory||!x.sales)throw 0;db=x;save();alert('Backup restored.')}catch(e){alert('Invalid HBMS backup.')}};r.readAsText(file)}
 function resetDB(){if(confirm('WARNING: Delete all local HBMS records?')){localStorage.removeItem(K);location.reload()}}
 function saveSettings(){db.settings.biz=biz.value.trim()||'HURE Hardware & Construction Supplies';db.settings.addr=addr.value.trim();save();alert('Business information saved.')}
+async function importInventoryExcel(file){
+  if(!file)return;
+  try{
+    const isCsv=/\.csv$/i.test(file.name);
+    let rows=[];
+    if(isCsv){
+      const textData=await file.text();
+      rows=parseCSVText(textData);
+    }else{
+      if(typeof XLSX==='undefined') throw new Error('Excel reader is not loaded. Please check your internet connection and try again.');
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    }
+    if(!rows.length)throw new Error('The Excel file is empty.');
+    const headers=rows[0].map(x=>String(x??'').trim());
+    const norm=s=>String(s??'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const findCol=(...names)=>{
+      const wanted=names.map(norm);
+      return headers.findIndex(h=>wanted.includes(norm(h)));
+    };
+    const ix={
+      code:findCol('ITEM CODE','Item Code','Code','SKU','Product Code'),
+      name:findCol('Item Name','Item','Description','Product Name'),
+      unit:findCol('Unit','UOM'),
+      price:findCol('Unit Price','Selling Price','Price','Sale Price'),
+      stock:findCol('Stock Qty','Stock Quantity','Stock','Qty','Quantity'),
+      cost:findCol('Cost Price','Cost','Unit Cost','Purchase Price'),
+      supplier:findCol('Supplier','Supplier Name'),
+      reorder:findCol('Reoder Level','Reorder Level','Reorder','Reorder Point','Minimum Stock'),
+      cat:findCol('CAT','Category','Item Category')
+    };
+    if(ix.code<0||ix.name<0)throw new Error('Required columns not found. Your file must contain ITEM CODE and Item Name.');
+    const imported=[];
+    const errors=[];
+    for(let n=1;n<rows.length;n++){
+      const row=rows[n];
+      const code=String(ix.code>=0?row[ix.code]??'':'').trim();
+      const name=String(ix.name>=0?row[ix.name]??'':'').trim();
+      if(!code&&!name)continue;
+      if(!code||!name){errors.push('Row '+(n+1)+': missing Item Code or Item Name');continue;}
+      const num=v=>{const x=String(v??'').replace(/,/g,'').replace(/₱/g,'').trim();return x===''?0:Number(x)||0};
+      imported.push({
+        code,name,
+        cat:String(ix.cat>=0?row[ix.cat]??'':'').trim(),
+        unit:String(ix.unit>=0?row[ix.unit]??'':'').trim(),
+        cost:num(ix.cost>=0?row[ix.cost]:0),
+        price:num(ix.price>=0?row[ix.price]:0),
+        stock:num(ix.stock>=0?row[ix.stock]:0),
+        reorder:num(ix.reorder>=0?row[ix.reorder]:0),
+        supplier:String(ix.supplier>=0?row[ix.supplier]??'':'').trim()
+      });
+    }
+    const duplicateCodes=[];
+    const seen=new Set();
+    imported.forEach(x=>{if(seen.has(x.code))duplicateCodes.push(x.code);seen.add(x.code)});
+    if(duplicateCodes.length)throw new Error('Duplicate Item Code(s) in Excel: '+[...new Set(duplicateCodes)].join(', '));
+    const ok=confirm('Import '+imported.length+' inventory item(s) from '+file.name+'?\n\nExisting matching Item Codes will be updated. New Item Codes will be added.\n\nYour Item Codes will NOT be changed.');
+    if(!ok)return;
+    let added=0,updated=0;
+    imported.forEach(x=>{
+      const existing=db.inventory.find(i=>i.code===x.code);
+      if(existing){Object.assign(existing,x);updated++}
+      else{db.inventory.push(x);added++}
+    });
+    save();
+    alert('Inventory import complete.\n\nAdded: '+added+'\nUpdated: '+updated+(errors.length?'\nSkipped rows: '+errors.length:''));
+    document.getElementById('excelImport').value='';
+  }catch(e){
+    alert('Excel import failed:\n\n'+(e.message||e));
+    document.getElementById('excelImport').value='';
+  }
+}
+function parseCSVText(textData){
+  const lines=textData.split(/\r?\n/).filter(x=>x.trim()!=='');
+  return lines.map(line=>{
+    const out=[];let cur='',q=false;
+    for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===','&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out;
+  });
+}
 function exportInventory(){download('HURE_Inventory.csv',csv([['Code','Item','Category','Unit','Cost','Price','Stock','Reorder','Supplier'],...db.inventory.map(x=>[x.code,x.name,x.cat,x.unit,x.cost,x.price,x.stock,x.reorder,x.supplier])]),'text/csv')}
 function exportSales(){download('HURE_Sales.csv',csv([['Date','Invoice','Code','Item','Qty','Price','Amount','Payment','Customer','Cost','Profit'],...db.sales.map(x=>[x.date,x.invoice,x.code,x.item,x.qty,x.price,x.amount,x.payment,x.customer,x.cost,x.profit])]),'text/csv')}
 function renderSettings(){biz.value=db.settings.biz||'';addr.value=db.settings.addr||''}
